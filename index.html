@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Своя Игра — Панель управления</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Montserrat:wght@700;800;900&display=swap');
+
+    body {
+      background: radial-gradient(circle at 50% 20%, #0f172a 0%, #020617 100%);
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      min-height: 100vh;
+      user-select: none;
+    }
+
+    .font-display { font-family: 'Montserrat', sans-serif; }
+
+    .board-cell {
+      background: linear-gradient(145deg, #1e3a8a 0%, #172554 100%);
+      border: 1px solid #3b82f6;
+      box-shadow: 0 4px 15px rgba(30, 58, 138, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+      transition: all 0.2s ease;
+    }
+
+    .board-cell:hover:not(.played) {
+      transform: translateY(-2px);
+      border-color: #fbbf24;
+      box-shadow: 0 6px 20px rgba(251, 191, 36, 0.35);
+      cursor: pointer;
+    }
+
+    .board-cell.played {
+      background: #090d16;
+      border-color: #1e293b;
+      color: transparent;
+      box-shadow: none;
+      cursor: default;
+    }
+
+    .buzzer-btn {
+      width: 72vw;
+      height: 72vw;
+      max-width: 300px;
+      max-height: 300px;
+      border-radius: 50%;
+      border: 10px solid #7f1d1d;
+      background: radial-gradient(circle, #ef4444 0%, #b91c1c 100%);
+      box-shadow: 0 12px 30px rgba(220, 38, 38, 0.45), inset 0 -10px 25px rgba(0, 0, 0, 0.35);
+      transition: transform 0.08s, box-shadow 0.08s, background 0.2s;
+      touch-action: manipulation;
+    }
+
+    .buzzer-btn:active:not(:disabled) {
+      transform: scale(0.95) translateY(4px);
+    }
+
+    .buzzer-btn:disabled {
+      background: radial-gradient(circle, #334155 0%, #1e293b 100%);
+      border-color: #0f172a;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    .buzzer-btn.active-buzz {
+      background: radial-gradient(circle, #22c55e 0%, #15803d 100%);
+      border-color: #14532d;
+      box-shadow: 0 0 50px rgba(34, 197, 94, 0.8);
+    }
+
+    .modal-backdrop {
+      backdrop-filter: blur(10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center">
+
+  <!-- 1. СТАРТОВЫЙ ЭКРАН -->
+  <div id="screen-start" class="flex flex-col items-center justify-center w-full max-w-3xl p-6 text-center space-y-6">
+    <div class="px-3.5 py-1 rounded-full bg-blue-950/90 border border-blue-800 text-blue-300 text-xs font-semibold tracking-widest uppercase">
+      Система проведения интеллектуальных игр
+    </div>
+    <h1 class="text-5xl md:text-6xl font-black font-display text-transparent bg-clip-text bg-gradient-to-b from-amber-300 to-amber-500 tracking-tight uppercase">
+      Своя Игра
+    </h1>
+    <p class="text-base text-slate-400 max-w-md mx-auto">
+      Выберите режим: управление табло для проектора или мобильный пульт для команды.
+    </p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md pt-4">
+      <button onclick="app.showScreen('host-editor')" class="py-4 px-6 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-base transition shadow-lg shadow-blue-950/50 border border-blue-400/40">
+        Панель ведущего
+      </button>
+      <button onclick="app.showScreen('player-join')" class="py-4 px-6 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-base transition shadow-lg shadow-emerald-950/50 border border-emerald-400/40">
+        Пульт игрока
+      </button>
+    </div>
+  </div>
+
+  <!-- 2. ЭКРАН ВЕДУЩЕГО: КОНСТРУКТОР -->
+  <div id="screen-host-editor" class="hidden w-full max-w-6xl p-4 md:p-6 flex-col min-h-screen">
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-4 border-b border-slate-800 pb-4">
+      <div>
+        <h2 class="text-2xl font-black font-display text-amber-400 uppercase">Конструктор игры</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Автосохранение включено. Для переноса на другой ПК используйте Экспорт/Импорт JSON.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="app.showScreen('start')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold">На главную</button>
+        <button onclick="app.openCheatSheet()" class="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold">Шпаргалка судьи</button>
+        <button onclick="app.resetPlayedState()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold">Сбросить прогресс</button>
+        <button onclick="app.clearAllQuestions()" class="px-3 py-2 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 rounded-lg text-xs font-semibold">Очистить всё</button>
+        <button onclick="app.exportGame()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold">Экспорт JSON</button>
+        <button onclick="document.getElementById('import-file').click()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold">Импорт JSON</button>
+        <input type="file" id="import-file" class="hidden" accept=".json" onchange="app.importGame(event)">
+        <button onclick="app.startHosting()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-bold text-sm text-white shadow-lg">
+          Запустить табло &rarr;
+        </button>
+      </div>
+    </div>
+
+    <!-- Управление раундами -->
+    <div class="bg-slate-900/90 border border-slate-800 p-3.5 rounded-xl mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2" id="editor-rounds-tabs"></div>
+      <div class="flex items-center gap-2">
+        <input type="text" id="current-round-title" onchange="app.updateRoundTitle(this.value)" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-blue-500" placeholder="Название раунда">
+        <button onclick="app.addRound()" class="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-lg font-semibold text-xs">+ Добавить раунд</button>
+        <button onclick="app.removeCurrentRound()" id="btn-remove-round" class="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/50 rounded-lg font-semibold text-xs">Удалить раунд</button>
+      </div>
+    </div>
+
+    <!-- Панель настроек текущего раунда -->
+    <div class="bg-slate-900/90 border border-slate-800 p-3.5 rounded-xl mb-5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-6">
+        <label class="flex items-center gap-2 text-xs font-semibold text-slate-300">
+          <span>Таймер (сек):</span>
+          <input type="number" id="setting-timer" value="30" min="5" max="120" onchange="app.saveSettings()" class="w-16 bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-center text-amber-400 font-bold">
+        </label>
+        <label class="flex items-center gap-2 text-xs font-semibold text-slate-300 cursor-pointer">
+          <input type="checkbox" id="setting-autotimer" checked onchange="app.saveSettings()" class="w-4 h-4 accent-blue-500 rounded">
+          <span>Автозапуск таймера при открытии вопроса</span>
+        </label>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="app.removeQuestionColumn()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg font-semibold text-xs text-slate-300">- Столбец</button>
+        <button onclick="app.addQuestionColumn()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg font-semibold text-xs text-slate-300">+ Столбец</button>
+        <button onclick="app.addCategory()" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold text-xs text-white">+ Категория</button>
+      </div>
+    </div>
+
+    <div id="editor-container" class="space-y-4 pb-16 w-full"></div>
+  </div>
+
+  <!-- 3. ЭКРАН ВЕДУЩЕГО: ИГРОВОЕ ТАБЛО -->
+  <div id="screen-host-board" class="hidden w-full h-screen flex-col p-3 md:p-4 justify-between">
+    <!-- Верхняя панель -->
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-2 bg-slate-900/90 px-4 py-2 rounded-xl border border-slate-800 shrink-0">
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span class="text-slate-400 text-xs font-bold uppercase tracking-wider">Код:</span>
+          <span id="room-code-display" class="text-xl md:text-2xl font-black font-display text-amber-400 bg-slate-950 border border-blue-500/40 px-3 py-0.5 rounded-lg tracking-widest">----</span>
+          <button onclick="app.restartHostServer()" title="Сгенерировать новый код при сбое сети" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-bold">↻</button>
+        </div>
+        <div class="text-xs text-slate-400 hidden lg:block">
+          Пультов: <span id="players-count" class="text-emerald-400 font-bold text-sm">0</span>
+        </div>
+      </div>
+
+      <!-- Переключатель раундов на табло -->
+      <div class="flex items-center gap-1.5" id="board-rounds-switcher"></div>
+
+      <div class="flex items-center gap-2">
+        <button onclick="app.addManualTeamPrompt()" class="px-3 py-1.5 bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-800 rounded-lg text-xs font-semibold">+ Команда</button>
+        <button onclick="app.openCheatSheet()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg text-xs font-semibold">Шпаргалка</button>
+        <button onclick="app.resetPlayedState()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Сброс</button>
+        <button onclick="app.backToEditor()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Редактор</button>
+      </div>
+    </div>
+
+    <!-- Сетка вопросов -->
+    <div id="game-board" class="flex-grow grid gap-2 my-1 overflow-hidden"></div>
+
+    <!-- Нижняя панель команд -->
+    <div id="teams-panel" class="min-h-[96px] mt-2 flex gap-2.5 justify-center items-stretch overflow-x-auto py-1 shrink-0"></div>
+  </div>
+
+  <!-- 4. МОДАЛЬНОЕ ОКНО ВОПРОСА -->
+  <div id="question-modal" class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4 hidden">
+    <div class="w-full max-w-4xl bg-slate-900 border-2 border-blue-500/80 rounded-2xl shadow-2xl flex flex-col justify-between overflow-hidden max-h-[92vh]">
+     
+      <!-- Шапка окна -->
+      <div class="flex justify-between items-center bg-slate-950/80 px-6 py-3.5 border-b border-slate-800 shrink-0">
+        <div class="flex items-center gap-3">
+          <span id="q-category" class="text-sm md:text-base text-blue-300 font-bold uppercase tracking-wider">Категория</span>
+          <span class="text-slate-600">•</span>
+          <span id="q-points" class="text-xl md:text-2xl font-black font-display text-amber-400">100</span>
+        </div>
+        <button onclick="app.cancelQuestion()" class="text-xs font-semibold text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition">
+          Вернуть на табло
+        </button>
+      </div>
+
+      <!-- Центральная часть: Вопрос и правильный ответ (без обрезки текста) -->
+      <div class="p-6 md:p-8 flex flex-col items-center text-center flex-grow overflow-y-auto">
+        <div class="my-auto flex flex-col items-center space-y-6 w-full py-4">
+          <div id="q-text" class="text-2xl md:text-4xl font-bold leading-normal text-white max-w-3xl shrink-0">
+            Текст вопроса
+          </div>
+          <div id="q-answer" class="hidden w-full max-w-2xl bg-emerald-950/80 border-2 border-emerald-500/80 rounded-xl px-6 py-4 text-xl md:text-3xl font-bold text-emerald-300 shrink-0 shadow-lg mt-6">
+            Правильный ответ: <span id="q-answer-text" class="text-white"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Блок управления судьи и таймера -->
+      <div class="bg-slate-950/90 px-6 py-4 border-t border-slate-800 space-y-4 shrink-0">
+       
+        <!-- Полоса таймера -->
+        <div>
+          <div class="flex justify-between items-center text-xs font-semibold text-slate-400 mb-1.5">
+            <span>Время на размышление</span>
+            <span id="timer-text" class="text-amber-400 font-mono text-sm font-bold">30 сек</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+            <div id="timer-bar" style="width: 100%; background-color: #22c55e;" class="h-full transition-all duration-100 ease-linear"></div>
+          </div>
+        </div>
+
+        <!-- Зона выбора команды судьей -->
+        <div id="manual-select-bar" class="flex flex-wrap items-center justify-between gap-2 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5">
+          <span class="text-xs font-semibold text-slate-400">Ожидание сигнала с пультов или выбор судьи:</span>
+          <div id="manual-team-buttons" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- Компактная панель ответа команды -->
+        <div id="answering-team-banner" class="hidden bg-slate-900 border-2 border-amber-400/80 rounded-xl px-4 py-3 shadow-lg">
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+              <div class="text-left">
+                <div class="text-[11px] text-amber-300 font-bold uppercase tracking-wider">Отвечает команда</div>
+                <div class="flex items-baseline gap-2">
+                  <span id="answering-team-name" class="text-xl md:text-2xl font-black text-white">Команда</span>
+                  <span id="answering-team-score" class="text-xs font-semibold text-slate-400">(Счёт: 0)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="app.resolveAnswer(true)" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg shadow flex items-center gap-1.5 transition">
+                <span>Верно</span>
+                <span class="bg-emerald-800/80 px-1.5 py-0.5 rounded text-xs font-black">+<span class="curr-pts">0</span></span>
+                <span class="text-[10px] opacity-70 ml-0.5 hidden md:inline">[Enter]</span>
+              </button>
+              <button onclick="app.resolveAnswer(false)" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold rounded-lg shadow flex items-center gap-1.5 transition">
+                <span>Неверно</span>
+                <span class="bg-rose-800/80 px-1.5 py-0.5 rounded text-xs font-black">-<span class="curr-pts">0</span></span>
+                <span class="text-[10px] opacity-70 ml-0.5 hidden md:inline">[Backspace]</span>
+              </button>
+              <button onclick="app.cancelBuzz()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition">
+                Фальстарт
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Нижний ряд кнопок -->
+        <div class="flex flex-wrap justify-between items-center gap-2 pt-1">
+          <button id="btn-timer" onclick="app.toggleTimer()" class="px-4 py-2 bg-amber-600/90 hover:bg-amber-500 text-white rounded-lg font-semibold text-xs md:text-sm transition">
+            Пауза / Пуск <span class="opacity-70 text-xs ml-1">[Пробел]</span>
+          </button>
+          <div class="flex gap-2">
+            <button onclick="app.showAnswer()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold text-xs md:text-sm transition">
+              Показать ответ <span class="opacity-70 text-xs ml-1">[A]</span>
+            </button>
+            <button onclick="app.closeQuestion()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold text-xs md:text-sm transition">
+              Завершить вопрос <span class="opacity-70 text-xs ml-1">[Esc]</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. МОДАЛЬНОЕ ОКНО: ШПАРГАЛКА СУДЬИ -->
+  <div id="cheatsheet-modal" class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4 hidden">
+    <div class="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col max-h-[88vh] overflow-hidden">
+      <div class="flex justify-between items-center px-6 py-4 bg-slate-950 border-b border-slate-800">
+        <div>
+          <h3 class="text-lg font-bold text-amber-400">Карта ответов (Все раунды)</h3>
+          <p class="text-xs text-slate-400">Сфотографируйте экран на смартфон перед началом игры</p>
+        </div>
+        <button onclick="app.closeCheatSheet()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold">Закрыть</button>
+      </div>
+      <div id="cheatsheet-content" class="p-6 overflow-y-auto space-y-6 text-sm"></div>
+    </div>
+  </div>
+
+  <!-- 6. ЭКРАН ИГРОКА: ПОДКЛЮЧЕНИЕ -->
+  <div id="screen-player-join" class="hidden w-full max-w-sm p-6 flex-col items-center justify-center min-h-screen">
+    <div class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5">
+      <button onclick="app.showScreen('start')" class="text-xs text-slate-400 hover:text-white font-semibold">&larr; Назад</button>
+      <div class="text-center">
+        <h2 class="text-2xl font-black font-display text-white">Пульт команды</h2>
+        <p class="text-xs text-slate-400 mt-1">Введите 4-значный код комнаты с экрана</p>
+      </div>
+      <div class="space-y-3.5">
+        <input type="text" id="player-room" maxlength="4" inputmode="numeric" placeholder="КОД (4 цифры)" class="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 p-3.5 rounded-xl text-2xl font-black text-center text-amber-400 tracking-widest uppercase focus:outline-none">
+        <input type="text" id="player-team" maxlength="20" placeholder="Название команды" class="w-full bg-slate-950 border border-slate-700 focus:border-blue-500 p-3.5 rounded-xl text-base font-bold text-center text-white focus:outline-none">
+        <button id="btn-join" onclick="app.joinGame()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 rounded-xl font-bold text-base transition shadow-lg">
+          Подключиться
+        </button>
+      </div>
+      <div id="join-status" class="text-center text-xs font-semibold text-amber-400 min-h-[18px]"></div>
+    </div>
+  </div>
+
+  <!-- 7. ЭКРАН ИГРОКА: КНОПКА ОТВЕТА -->
+  <div id="screen-player-buzzer" class="hidden w-full h-screen flex-col items-center justify-between p-6">
+    <div class="w-full text-center space-y-2 mt-4">
+      <div id="player-team-badge" class="inline-block px-4 py-1 bg-slate-900 border border-slate-700 rounded-full text-xs font-bold text-slate-300 uppercase">
+        Команда
+      </div>
+      <div id="player-status-text" class="text-xl font-black tracking-wide text-slate-400">
+        ОЖИДАНИЕ ВОПРОСА
+      </div>
+    </div>
+
+    <div class="flex items-center justify-center my-auto">
+      <button id="buzzer-btn" class="buzzer-btn flex items-center justify-center text-2xl font-black font-display tracking-wider text-white uppercase" disabled onmousedown="app.buzz(event)" ontouchstart="app.buzz(event)">
+        ОТВЕТИТЬ
+      </button>
+    </div>
+
+    <div class="text-xs text-slate-500 text-center mb-2">
+      Держите экран открытым до конца раунда
+    </div>
+  </div>
+
+  <script>
+     var PEER_CONFIG = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      },
+      debug: 2
+    };
+
+    var SoundSys = {
+      ctx: null,
+      init: function() {
+        if (!this.ctx) {
+          var AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+      playTone: function(freq, type, duration, vol) {
+        if (vol === undefined) vol = 0.15;
+        this.init();
+        if (!this.ctx) return;
+        var osc = this.ctx.createOscillator();
+        var gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.00001, this.ctx.currentTime + duration);
+        osc.stop(this.ctx.currentTime + duration);
+      },
+      open: function() {
+        var self = this;
+        this.playTone(440, 'sine', 0.1, 0.15);
+        setTimeout(function() { self.playTone(660, 'sine', 0.25, 0.15); }, 90);
+      },
+      buzz: function() {
+        this.playTone(190, 'sawtooth', 0.45, 0.25);
+      },
+      tick: function() {
+        this.playTone(880, 'square', 0.04, 0.03);
+      },
+      timeup: function() {
+        this.playTone(160, 'square', 0.8, 0.2);
+      }
+    };
+
+    function createEmptyCategories(multiplier) {
+      var mult = multiplier || 1;
+      var list = [];
+      var basePoints = [100, 200, 300, 400, 500];
+      for (var i = 0; i < 5; i++) {
+        var questions = [];
+        for (var j = 0; j < basePoints.length; j++) {
+          questions.push({ p: basePoints[j] * mult, t: '', a: '', played: false });
+        }
+        list.push({ cat: 'Категория ' + (i + 1), q: questions });
+      }
+      return list;
+    }
+
+    function createDefaultRounds() {
+      return [
+        { title: 'Раунд 1', categories: createEmptyCategories(1) },
+        { title: 'Раунд 2', categories: createEmptyCategories(2) }
+      ];
+    }
+
+    var app = {
+      role: null,
+      rounds: null,
+      currentRound: 0,
+      settings: { duration: 30, autoStart: true },
+      teams: {},
+      lastCorrectTeam: null,
+      peer: null,
+      roomId: null,
+      connections: [],
+      hostConn: null,
+      joinTimeout: null,
+      activeQuestion: null,
+      timerInterval: null,
+      timeLeft: 0,
+      timerRunning: false,
+      lockedTeams: {},
+      activeBuzzerTeam: null,
+
+      init: function() {
+        var savedData = localStorage.getItem('svoya_igra_rounds_v2');
+        if (savedData) {
+          try {
+            var parsed = JSON.parse(savedData);
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].categories) {
+              this.rounds = parsed;
+            } else {
+              this.rounds = createDefaultRounds();
+            }
+          } catch (e) {
+            this.rounds = createDefaultRounds();
+          }
+        } else {
+          // Проверка старого формата данных для автоматической миграции
+          var oldData = localStorage.getItem('svoya_igra_custom_data');
+          if (oldData) {
+            try {
+              var oldParsed = JSON.parse(oldData);
+              if (Array.isArray(oldParsed) && oldParsed.length > 0 && oldParsed[0].q) {
+                this.rounds = [
+                  { title: 'Раунд 1', categories: oldParsed },
+                  { title: 'Раунд 2', categories: createEmptyCategories(2) }
+                ];
+                this.saveData();
+              } else {
+                this.rounds = createDefaultRounds();
+              }
+            } catch (e) {
+              this.rounds = createDefaultRounds();
+            }
+          } else {
+            this.rounds = createDefaultRounds();
+          }
+        }
+
+        var savedSettings = localStorage.getItem('svoya_igra_settings');
+        if (savedSettings) {
+          try {
+            this.settings = JSON.parse(savedSettings);
+          } catch (e) {}
+        }
+
+        document.getElementById('setting-timer').value = this.settings.duration;
+        document.getElementById('setting-autotimer').checked = this.settings.autoStart;
+
+        var self = this;
+        document.addEventListener('keydown', function(e) {
+          var modalActive = document.getElementById('question-modal').classList.contains('active');
+          if (!modalActive) return;
+
+          if (e.code === 'Space') {
+            e.preventDefault();
+            self.toggleTimer();
+          } else if (e.code === 'Enter' && self.activeBuzzerTeam) {
+            e.preventDefault();
+            self.resolveAnswer(true);
+          } else if (e.code === 'Backspace' && self.activeBuzzerTeam) {
+            e.preventDefault();
+            self.resolveAnswer(false);
+          } else if (e.code === 'KeyA') {
+            e.preventDefault();
+            self.showAnswer();
+          } else if (e.code === 'Escape') {
+            e.preventDefault();
+            self.closeQuestion();
+          }
+        });
+      },
+
+      getCurrentCategories: function() {
+        if (!this.rounds[this.currentRound]) {
+          this.currentRound = 0;
+        }
+        return this.rounds[this.currentRound].categories;
+      },
+
+      showScreen: function(id) {
+        var screens = document.querySelectorAll('body > div[id^="screen-"]');
+        for (var i = 0; i < screens.length; i++) {
+          screens[i].classList.add('hidden');
+          screens[i].classList.remove('flex');
+        }
+        var target = document.getElementById('screen-' + id);
+        if (target) {
+          target.classList.remove('hidden');
+          target.classList.add('flex');
+        }
+        if (id === 'host-editor') this.renderEditor();
+      },
+
+      saveSettings: function() {
+        var dur = parseInt(document.getElementById('setting-timer').value, 10) || 30;
+        var auto = document.getElementById('setting-autotimer').checked;
+        this.settings = { duration: Math.max(5, Math.min(120, dur)), autoStart: auto };
+        localStorage.setItem('svoya_igra_settings', JSON.stringify(this.settings));
+      },
+
+      escapeHtml: function(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      },
+
+      // --- УПРАВЛЕНИЕ РАУНДАМИ И РЕДАКТОР ---
+      selectRound: function(rIdx) {
+        if (rIdx < 0 || rIdx >= this.rounds.length) return;
+        this.currentRound = rIdx;
+        if (this.role === 'host' && !document.getElementById('screen-host-board').classList.contains('hidden')) {
+          this.renderBoard();
+        } else {
+          this.renderEditor();
+        }
+      },
+
+      addRound: function() {
+        var nextNum = this.rounds.length + 1;
+        this.rounds.push({
+          title: 'Раунд ' + nextNum,
+          categories: createEmptyCategories(nextNum)
+        });
+        this.currentRound = this.rounds.length - 1;
+        this.saveData();
+        this.renderEditor();
+      },
+
+      removeCurrentRound: function() {
+        if (this.rounds.length <= 1) return;
+        if (!confirm('Удалить «' + this.rounds[this.currentRound].title + '» со всеми его вопросами?')) return;
+        this.rounds.splice(this.currentRound, 1);
+        if (this.currentRound >= this.rounds.length) {
+          this.currentRound = this.rounds.length - 1;
+        }
+        this.saveData();
+        this.renderEditor();
+      },
+
+      updateRoundTitle: function(val) {
+        this.rounds[this.currentRound].title = val || ('Раунд ' + (this.currentRound + 1));
+        this.saveData();
+        this.renderEditorTabs();
+      },
+
+      renderEditorTabs: function() {
+        var tabsContainer = document.getElementById('editor-rounds-tabs');
+        tabsContainer.innerHTML = '';
+        var self = this;
+
+        for (var i = 0; i < this.rounds.length; i++) {
+          (function(idx) {
+            var isCurrent = (idx === self.currentRound);
+            var btn = document.createElement('button');
+            btn.className = isCurrent
+              ? 'px-4 py-1.5 bg-amber-400 text-slate-950 font-black rounded-lg text-xs shadow'
+              : 'px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-xs';
+            btn.innerText = self.rounds[idx].title;
+            btn.onclick = function() { self.selectRound(idx); };
+            tabsContainer.appendChild(btn);
+          })(i);
+        }
+
+        document.getElementById('current-round-title').value = this.rounds[this.currentRound].title;
+        var removeBtn = document.getElementById('btn-remove-round');
+        if (this.rounds.length <= 1) {
+          removeBtn.classList.add('hidden');
+        } else {
+          removeBtn.classList.remove('hidden');
+        }
+      },
+
+      renderEditor: function() {
+        this.renderEditorTabs();
+        var container = document.getElementById('editor-container');
+        container.innerHTML = '';
+        var categories = this.getCurrentCategories();
+
+        for (var cIdx = 0; cIdx < categories.length; cIdx++) {
+          var cat = categories[cIdx];
+          var catDiv = document.createElement('div');
+          catDiv.className = 'bg-slate-900/90 p-4 rounded-xl border border-slate-800';
+
+          var questionsHtml = '';
+          for (var qIdx = 0; qIdx < cat.q.length; qIdx++) {
+            var q = cat.q[qIdx];
+            questionsHtml +=
+              '<div class="flex flex-col md:flex-row gap-2 items-center bg-slate-950 p-2 rounded-lg border border-slate-800/80">' +
+                '<input type="number" value="' + q.p + '" onchange="app.updateQ(' + cIdx + ', ' + qIdx + ', \'p\', this.value)" class="w-full md:w-24 bg-slate-900 border border-slate-700 p-2 rounded text-center text-amber-400 font-bold text-sm" placeholder="Очки">' +
+                '<input type="text" value="' + this.escapeHtml(q.t) + '" onchange="app.updateQ(' + cIdx + ', ' + qIdx + ', \'t\', this.value)" class="w-full flex-grow bg-slate-900 border border-slate-700 p-2 rounded text-white text-sm" placeholder="Текст вопроса">' +
+                '<input type="text" value="' + this.escapeHtml(q.a) + '" onchange="app.updateQ(' + cIdx + ', ' + qIdx + ', \'a\', this.value)" class="w-full md:w-1/3 bg-slate-900 border border-slate-700 p-2 rounded text-emerald-300 text-sm" placeholder="Правильный ответ">' +
+              '</div>';
+          }
+
+          var deleteBtnHtml = '';
+          if (categories.length > 1) {
+            deleteBtnHtml = '<button onclick="app.removeCategory(' + cIdx + ')" class="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 text-rose-300 rounded text-xs font-semibold border border-rose-800/50">Удалить тему</button>';
+          }
+
+          catDiv.innerHTML =
+            '<div class="flex justify-between items-center gap-4 mb-3">' +
+              '<input type="text" value="' + this.escapeHtml(cat.cat) + '" onchange="app.updateCat(' + cIdx + ', this.value)" class="bg-slate-950 border border-blue-500/40 text-base font-bold px-3 py-1.5 rounded-lg w-full max-w-md text-blue-200 focus:outline-none focus:border-blue-400" placeholder="Название категории">' +
+              deleteBtnHtml +
+            '</div>' +
+            '<div class="space-y-2">' + questionsHtml + '</div>';
+
+          container.appendChild(catDiv);
+        }
+      },
+
+      addCategory: function() {
+        var categories = this.getCurrentCategories();
+        var nextNum = categories.length + 1;
+        var colsCount = (categories[0] && categories[0].q) ? categories[0].q.length : 5;
+        var mult = this.currentRound + 1;
+        var newQuestions = [];
+        for (var i = 0; i < colsCount; i++) {
+          newQuestions.push({ p: (i + 1) * 100 * mult, t: '', a: '', played: false });
+        }
+        categories.push({ cat: 'Категория ' + nextNum, q: newQuestions });
+        this.saveData();
+        this.renderEditor();
+      },
+
+      addQuestionColumn: function() {
+        var categories = this.getCurrentCategories();
+        var mult = this.currentRound + 1;
+        for (var i = 0; i < categories.length; i++) {
+          var len = categories[i].q.length;
+          categories[i].q.push({ p: (len + 1) * 100 * mult, t: '', a: '', played: false });
+        }
+        this.saveData();
+        this.renderEditor();
+      },
+
+      removeQuestionColumn: function() {
+        var categories = this.getCurrentCategories();
+        if (!categories[0] || categories[0].q.length <= 1) return;
+        for (var i = 0; i < categories.length; i++) {
+          categories[i].q.pop();
+        }
+        this.saveData();
+        this.renderEditor();
+      },
+
+      removeCategory: function(cIdx) {
+        var categories = this.getCurrentCategories();
+        categories.splice(cIdx, 1);
+        this.saveData();
+        this.renderEditor();
+      },
+
+      clearAllQuestions: function() {
+        if (!confirm('Очистить все раунды, категории и вопросы до чистого шаблона?')) return;
+        this.rounds = createDefaultRounds();
+        this.currentRound = 0;
+        this.saveData();
+        this.renderEditor();
+      },
+
+      resetPlayedState: function() {
+        if (!confirm('Вернуть все сыгранные вопросы во всех раундах на табло и обнулить счёт команд? (Тексты вопросов сохранятся)')) return;
+        for (var r = 0; r < this.rounds.length; r++) {
+          var cats = this.rounds[r].categories;
+          for (var i = 0; i < cats.length; i++) {
+            for (var j = 0; j < cats[i].q.length; j++) {
+              cats[i].q[j].played = false;
+            }
+          }
+        }
+        var teamKeys = Object.keys(this.teams);
+        for (var k = 0; k < teamKeys.length; k++) {
+          this.teams[teamKeys[k]] = 0;
+        }
+        this.lastCorrectTeam = null;
+        this.saveData();
+        if (this.role === 'host' && !document.getElementById('screen-host-board').classList.contains('hidden')) {
+          this.renderBoard();
+        } else {
+          this.renderEditor();
+        }
+      },
+
+      openCheatSheet: function() {
+        var container = document.getElementById('cheatsheet-content');
+        var html = '';
+        for (var r = 0; r < this.rounds.length; r++) {
+          var roundObj = this.rounds[r];
+          html += '<div class="space-y-3">';
+          html += '<div class="text-base font-black text-amber-400 uppercase tracking-wider bg-slate-950 px-4 py-2 rounded-lg border border-slate-800">' + this.escapeHtml(roundObj.title) + '</div>';
+          for (var i = 0; i < roundObj.categories.length; i++) {
+            var cat = roundObj.categories[i];
+            html += '<div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5">';
+            html += '<div class="font-bold text-blue-300 uppercase mb-2 border-b border-slate-800 pb-1 text-xs">' + this.escapeHtml(cat.cat) + '</div>';
+            html += '<div class="space-y-1.5">';
+            for (var j = 0; j < cat.q.length; j++) {
+              var q = cat.q[j];
+              html += '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs py-1 border-b border-slate-900/60">' +
+                '<div class="text-slate-300"><span class="text-amber-400 font-bold mr-2">[' + q.p + ']</span>' + (this.escapeHtml(q.t) || '<i class="text-slate-600">Пусто</i>') + '</div>' +
+                '<div class="text-emerald-400 font-bold shrink-0">Ответ: ' + (this.escapeHtml(q.a) || '—') + '</div>' +
+              '</div>';
+            }
+            html += '</div></div>';
+          }
+          html += '</div>';
+        }
+        container.innerHTML = html;
+        var modal = document.getElementById('cheatsheet-modal');
+        modal.classList.remove('hidden');
+        setTimeout(function() { modal.classList.add('active'); }, 10);
+      },
+
+      closeCheatSheet: function() {
+        var modal = document.getElementById('cheatsheet-modal');
+        modal.classList.remove('active');
+        setTimeout(function() { modal.classList.add('hidden'); }, 200);
+      },
+
+      updateCat: function(cIdx, val) {
+        var categories = this.getCurrentCategories();
+        categories[cIdx].cat = val;
+        this.saveData();
+      },
+
+      updateQ: function(cIdx, qIdx, field, val) {
+        var categories = this.getCurrentCategories();
+        if (field === 'p') {
+          categories[cIdx].q[qIdx][field] = parseInt(val, 10) || 0;
+        } else {
+          categories[cIdx].q[qIdx][field] = val;
+        }
+        this.saveData();
+      },
+
+      saveData: function() {
+        localStorage.setItem('svoya_igra_rounds_v2', JSON.stringify(this.rounds));
+      },
+
+      exportGame: function() {
+        var dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(this.rounds, null, 2));
+        var anchor = document.createElement('a');
+        anchor.href = dataStr;
+        anchor.download = 'svoya-igra-pack.json';
+        anchor.click();
+      },
+
+      importGame: function(e) {
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+        var self = this;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          try {
+            var parsed = JSON.parse(ev.target.result);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              // Поддержка как нового многораундового JSON, так и старого однораундового
+              if (parsed[0].categories) {
+                self.rounds = parsed;
+              } else if (parsed[0].q) {
+                self.rounds = [{ title: 'Раунд 1', categories: parsed }];
+              }
+              self.currentRound = 0;
+              self.saveData();
+              self.renderEditor();
+            } else {
+              alert('Некорректный формат файла JSON');
+            }
+          } catch (err) {
+            alert('Ошибка чтения файла JSON');
+          }
+        };
+        reader.readAsText(file);
+      },
+
+      // --- СЕТЬ ВЕДУЩЕГО И ТАБЛО ---
+      startHosting: function() {
+        SoundSys.init();
+        this.role = 'host';
+        this.showScreen('host-board');
+        this.renderBoard();
+        if (!this.peer) {
+          this.initHostPeer();
+        }
+      },
+
+      restartHostServer: function() {
+        if (this.peer) {
+          try { this.peer.destroy(); } catch (e) {}
+          this.peer = null;
+        }
+        this.connections = [];
+        document.getElementById('players-count').innerText = '0';
+        this.initHostPeer();
+      },
+
+      initHostPeer: function() {
+        var self = this;
+        var pin = Math.floor(1000 + Math.random() * 9000).toString();
+        this.roomId = pin;
+        document.getElementById('room-code-display').innerText = '....';
+
+        this.peer = new Peer('si-krd-room-' + pin, PEER_CONFIG);
+
+        this.peer.on('open', function() {
+          document.getElementById('room-code-display').innerText = pin;
+        });
+
+        this.peer.on('error', function(err) {
+          if (err.type === 'unavailable-id') {
+            self.restartHostServer();
+          } else {
+            document.getElementById('room-code-display').innerText = pin;
+          }
+        });
+
+        this.peer.on('connection', function(conn) {
+          conn.on('open', function() {
+            conn.on('data', function(data) {
+              self.handleClientMessage(conn, data);
+            });
+          });
+          conn.on('close', function() {
+            self.connections = self.connections.filter(function(c) { return c.conn !== conn; });
+            document.getElementById('players-count').innerText = self.connections.length;
+          });
+        });
+      },
+
+      backToEditor: function() {
+        this.showScreen('host-editor');
+      },
+
+      addManualTeamPrompt: function() {
+        var name = prompt('Введите название новой команды:');
+        if (!name || !name.trim()) return;
+        var clean = name.trim();
+        if (this.teams[clean] === undefined) {
+          this.teams[clean] = 0;
+          this.updateTeamsPanel();
+        }
+      },
+
+      handleClientMessage: function(conn, data) {
+        if (!data || !data.action) return;
+        if (data.action === 'join') {
+          var team = String(data.team || 'Команда').trim();
+          if (this.teams[team] === undefined) this.teams[team] = 0;
+          this.connections = this.connections.filter(function(c) { return c.team !== team; });
+          this.connections.push({ conn: conn, team: team });
+          this.updateTeamsPanel();
+          document.getElementById('players-count').innerText = this.connections.length;
+          conn.send({ type: 'joined', status: this.activeQuestion ? 'READY' : 'IDLE' });
+        } else if (data.action === 'buzz' && this.activeQuestion && !this.activeBuzzerTeam) {
+          if (this.lockedTeams[data.team]) return;
+          this.triggerTeamBuzz(data.team);
+        }
+      },
+
+      triggerTeamBuzz: function(teamName) {
+        if (!this.activeQuestion) return;
+        this.activeBuzzerTeam = teamName;
+        this.pauseTimer();
+        SoundSys.buzz();
+
+        for (var i = 0; i < this.connections.length; i++) {
+          var c = this.connections[i];
+          if (c.team === teamName) c.conn.send({ type: 'status', status: 'ACTIVE' });
+          else c.conn.send({ type: 'status', status: 'LOCKED' });
+        }
+
+        document.getElementById('answering-team-name').innerText = teamName;
+        var curScore = this.teams[teamName] !== undefined ? this.teams[teamName] : 0;
+        document.getElementById('answering-team-score').innerText = '(Счёт: ' + curScore + ')';
+
+        document.getElementById('manual-select-bar').classList.add('hidden');
+        document.getElementById('answering-team-banner').classList.remove('hidden');
+
+        var ptsSpans = document.querySelectorAll('.curr-pts');
+        for (var j = 0; j < ptsSpans.length; j++) {
+          ptsSpans[j].innerText = this.activeQuestion.p;
+        }
+      },
+
+      cancelBuzz: function() {
+        if (!this.activeBuzzerTeam) return;
+        this.activeBuzzerTeam = null;
+        document.getElementById('answering-team-banner').classList.add('hidden');
+        document.getElementById('manual-select-bar').classList.remove('hidden');
+
+        for (var i = 0; i < this.connections.length; i++) {
+          var c = this.connections[i];
+          if (!this.lockedTeams[c.team]) {
+            c.conn.send({ type: 'status', status: 'READY' });
+          }
+        }
+        this.startTimer();
+      },
+
+      renderBoardRoundsSwitcher: function() {
+        var switcher = document.getElementById('board-rounds-switcher');
+        switcher.innerHTML = '';
+        var self = this;
+        for (var i = 0; i < this.rounds.length; i++) {
+          (function(idx) {
+            var isCurrent = (idx === self.currentRound);
+            var btn = document.createElement('button');
+            btn.className = isCurrent
+              ? 'px-3 py-1 bg-amber-400 text-slate-950 font-black rounded-lg text-xs shadow'
+              : 'px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg text-xs';
+            btn.innerText = self.rounds[idx].title;
+            btn.onclick = function() { self.selectRound(idx); };
+            switcher.appendChild(btn);
+          })(i);
+        }
+      },
+
+      renderBoard: function() {
+        this.renderBoardRoundsSwitcher();
+        var board = document.getElementById('game-board');
+        board.innerHTML = '';
+        var categories = this.getCurrentCategories();
+        var colsCount = (categories[0] && categories[0].q) ? categories[0].q.length : 5;
+        board.style.gridTemplateColumns = 'minmax(140px, 220px) repeat(' + colsCount + ', 1fr)';
+        board.style.gridAutoRows = '1fr';
+
+        var self = this;
+        for (var cIdx = 0; cIdx < categories.length; cIdx++) {
+          var cat = categories[cIdx];
+          var catHeader = document.createElement('div');
+          catHeader.className = 'bg-slate-900/95 border border-blue-500/40 rounded-xl flex items-center justify-center p-2 text-center font-bold text-xs md:text-base uppercase text-blue-100';
+          catHeader.innerText = cat.cat || ('Тема ' + (cIdx + 1));
+          board.appendChild(catHeader);
+
+          for (var qIdx = 0; qIdx < cat.q.length; qIdx++) {
+            (function(ci, qi, qObj) {
+              var cell = document.createElement('div');
+              cell.className = 'board-cell rounded-xl flex items-center justify-center text-2xl md:text-4xl font-black font-display text-amber-400';
+              if (qObj.played) {
+                cell.classList.add('played');
+              } else {
+                cell.innerText = qObj.p;
+              }
+              cell.onclick = function() {
+                if (!cell.classList.contains('played')) self.openQuestion(ci, qi, cell);
+              };
+              board.appendChild(cell);
+            })(cIdx, qIdx, cat.q[qIdx]);
+          }
+        }
+        this.updateTeamsPanel();
+      },
+
+      updateTeamsPanel: function() {
+        var panel = document.getElementById('teams-panel');
+        panel.innerHTML = '';
+        var teamNames = Object.keys(this.teams);
+
+        if (teamNames.length === 0) {
+          panel.innerHTML = '<div class="flex items-center text-slate-500 text-xs font-semibold">Подключите телефоны по коду комнаты или нажмите «+ Команда»</div>';
+          return;
+        }
+
+        var self = this;
+        for (var i = 0; i < teamNames.length; i++) {
+          (function(teamName) {
+            var pts = self.teams[teamName];
+            var isTurn = (self.lastCorrectTeam === teamName);
+            var borderClass = isTurn ? 'border-2 border-amber-400' : 'border border-slate-700';
+            var scoreColor = pts < 0 ? 'text-rose-400' : 'text-amber-400';
+
+            var card = document.createElement('div');
+            card.className = 'bg-slate-900/95 ' + borderClass + ' rounded-xl px-3.5 py-2 flex flex-col items-center justify-between min-w-[165px] relative shadow-md';
+
+            var topRow = document.createElement('div');
+            topRow.className = 'flex items-center justify-between w-full gap-1';
+
+            var title = document.createElement('div');
+            title.className = 'font-bold text-xs md:text-sm uppercase truncate text-white';
+            title.innerText = teamName;
+
+            var turnBadge = document.createElement('span');
+            if (isTurn) {
+              turnBadge.className = 'text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.5 rounded uppercase shrink-0';
+              turnBadge.innerText = 'Выбор';
+            }
+
+            topRow.appendChild(title);
+            if (isTurn) topRow.appendChild(turnBadge);
+
+            var score = document.createElement('div');
+            score.className = 'text-xl md:text-2xl font-black font-display ' + scoreColor + ' my-0.5 cursor-pointer';
+            score.title = 'Нажмите для точной корректировки счёта';
+            score.innerText = pts;
+            score.onclick = function() {
+              var newVal = prompt('Укажите точный счёт для команды «' + teamName + '»:', pts);
+              if (newVal !== null && !isNaN(parseInt(newVal, 10))) {
+                self.teams[teamName] = parseInt(newVal, 10);
+                self.updateTeamsPanel();
+              }
+            };
+
+            var btnRow = document.createElement('div');
+            btnRow.className = 'flex gap-1.5 w-full';
+
+            var btnMinus = document.createElement('button');
+            btnMinus.className = 'flex-1 bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-300 text-[11px] font-bold py-1 rounded transition';
+            btnMinus.innerText = '-100';
+            btnMinus.onclick = function() { self.manualPoints(teamName, -100); };
+
+            var btnPlus = document.createElement('button');
+            btnPlus.className = 'flex-1 bg-slate-800 hover:bg-emerald-950 text-slate-300 hover:text-emerald-300 text-[11px] font-bold py-1 rounded transition';
+            btnPlus.innerText = '+100';
+            btnPlus.onclick = function() { self.manualPoints(teamName, 100); };
+
+            btnRow.appendChild(btnMinus);
+            btnRow.appendChild(btnPlus);
+            card.appendChild(topRow);
+            card.appendChild(score);
+            card.appendChild(btnRow);
+            panel.appendChild(card);
+          })(teamNames[i]);
+        }
+      },
+
+      manualPoints: function(team, amount) {
+        this.teams[team] += amount;
+        this.updateTeamsPanel();
+      },
+
+      renderManualTeamButtons: function() {
+        var container = document.getElementById('manual-team-buttons');
+        container.innerHTML = '';
+        var teamNames = Object.keys(this.teams);
+        if (teamNames.length === 0) {
+          container.innerHTML = '<span class="text-xs text-slate-500">Нет добавленных команд</span>';
+          return;
+        }
+        var self = this;
+        for (var i = 0; i < teamNames.length; i++) {
+          (function(tName) {
+            var isLocked = self.lockedTeams[tName];
+            var btn = document.createElement('button');
+            btn.disabled = !!isLocked;
+            btn.className = isLocked
+              ? 'px-2.5 py-1 bg-slate-950 text-slate-600 rounded-lg text-xs font-bold border border-slate-800 cursor-not-allowed'
+              : 'px-2.5 py-1 bg-blue-950 hover:bg-blue-800 text-blue-200 rounded-lg text-xs font-bold border border-blue-700/60 transition';
+            btn.innerText = tName;
+            btn.onclick = function() { self.triggerTeamBuzz(tName); };
+            container.appendChild(btn);
+          })(teamNames[i]);
+        }
+      },
+
+      openQuestion: function(cIdx, qIdx, cellElement) {
+        SoundSys.init();
+        var categories = this.getCurrentCategories();
+        this.activeQuestion = categories[cIdx].q[qIdx];
+        this.activeQuestion.el = cellElement;
+        this.lockedTeams = {};
+        this.activeBuzzerTeam = null;
+
+        document.getElementById('q-category').innerText = categories[cIdx].cat;
+        document.getElementById('q-points').innerText = this.activeQuestion.p;
+        document.getElementById('q-text').innerText = this.activeQuestion.t || '(Вопрос не заполнен в конструкторе)';
+        document.getElementById('q-answer').classList.add('hidden');
+        document.getElementById('q-answer-text').innerText = this.activeQuestion.a || '(Ответ не указан)';
+
+        document.getElementById('answering-team-banner').classList.add('hidden');
+        document.getElementById('manual-select-bar').classList.remove('hidden');
+        this.renderManualTeamButtons();
+
+        var modal = document.getElementById('question-modal');
+        modal.classList.remove('hidden');
+        setTimeout(function() { modal.classList.add('active'); }, 10);
+
+        SoundSys.open();
+
+        for (var i = 0; i < this.connections.length; i++) {
+          this.connections[i].conn.send({ type: 'status', status: 'READY' });
+        }
+
+        this.pauseTimer();
+        this.timeLeft = Number(this.settings.duration) || 30;
+        this.updateTimerUI();
+        if (this.settings.autoStart) {
+          this.startTimer();
+        }
+      },
+
+      toggleTimer: function() {
+        if (this.timerRunning) this.pauseTimer();
+        else this.startTimer();
+      },
+
+      startTimer: function() {
+        if (this.timeLeft <= 0 || this.timerRunning) return;
+        this.timerRunning = true;
+        var lastSec = Math.ceil(this.timeLeft);
+        var self = this;
+
+        this.timerInterval = setInterval(function() {
+          self.timeLeft -= 0.1;
+          self.updateTimerUI();
+          var currentSec = Math.ceil(self.timeLeft);
+          if (currentSec <= 5 && currentSec > 0 && currentSec !== lastSec) {
+            SoundSys.tick();
+            lastSec = currentSec;
+          }
+          if (self.timeLeft <= 0) {
+            self.pauseTimer();
+            self.timeLeft = 0;
+            self.updateTimerUI();
+            SoundSys.timeup();
+            for (var i = 0; i < self.connections.length; i++) {
+              self.connections[i].conn.send({ type: 'status', status: 'LOCKED' });
+            }
+          }
+        }, 100);
+      },
+
+      pauseTimer: function() {
+        this.timerRunning = false;
+        clearInterval(this.timerInterval);
+      },
+
+      updateTimerUI: function() {
+        var total = Number(this.settings.duration) || 30;
+        var cur = Math.max(0, this.timeLeft);
+        var pct = Math.max(0, Math.min(100, (cur / total) * 100));
+        var bar = document.getElementById('timer-bar');
+        var txt = document.getElementById('timer-text');
+
+        if (bar) {
+          bar.style.width = pct + '%';
+          if (pct > 50) bar.style.backgroundColor = '#22c55e';
+          else if (pct > 20) bar.style.backgroundColor = '#facc15';
+          else bar.style.backgroundColor = '#ef4444';
+        }
+        if (txt) {
+          txt.innerText = Math.ceil(cur) + ' сек';
+        }
+      },
+
+      resolveAnswer: function(isCorrect) {
+        if (!this.activeBuzzerTeam) return;
+        var pts = this.activeQuestion.p;
+        var team = this.activeBuzzerTeam;
+
+        if (isCorrect) {
+          this.teams[team] = (this.teams[team] || 0) + pts;
+          this.lastCorrectTeam = team;
+          this.updateTeamsPanel();
+          this.activeBuzzerTeam = null;
+          document.getElementById('answering-team-banner').classList.add('hidden');
+          this.showAnswer();
+          for (var i = 0; i < this.connections.length; i++) {
+            this.connections[i].conn.send({ type: 'status', status: 'IDLE' });
+          }
+        } else {
+          this.teams[team] = (this.teams[team] || 0) - pts;
+          this.updateTeamsPanel();
+          this.lockedTeams[team] = true;
+          this.activeBuzzerTeam = null;
+          document.getElementById('answering-team-banner').classList.add('hidden');
+          document.getElementById('manual-select-bar').classList.remove('hidden');
+          this.renderManualTeamButtons();
+
+          for (var j = 0; j < this.connections.length; j++) {
+            var c = this.connections[j];
+            if (!this.lockedTeams[c.team]) {
+              c.conn.send({ type: 'status', status: 'READY' });
+            }
+          }
+          this.startTimer();
+        }
+      },
+
+      showAnswer: function() {
+        document.getElementById('q-answer').classList.remove('hidden');
+        this.pauseTimer();
+        for (var i = 0; i < this.connections.length; i++) {
+          this.connections[i].conn.send({ type: 'status', status: 'IDLE' });
+        }
+      },
+
+      cancelQuestion: function() {
+        var modal = document.getElementById('question-modal');
+        modal.classList.remove('active');
+        setTimeout(function() { modal.classList.add('hidden'); }, 200);
+        this.pauseTimer();
+        this.activeQuestion = null;
+        this.activeBuzzerTeam = null;
+        for (var i = 0; i < this.connections.length; i++) {
+          this.connections[i].conn.send({ type: 'status', status: 'IDLE' });
+        }
+      },
+
+      closeQuestion: function() {
+        var modal = document.getElementById('question-modal');
+        modal.classList.remove('active');
+        setTimeout(function() { modal.classList.add('hidden'); }, 200);
+
+        if (this.activeQuestion) {
+          this.activeQuestion.played = true;
+          if (this.activeQuestion.el) {
+            this.activeQuestion.el.classList.add('played');
+            this.activeQuestion.el.innerText = '';
+          }
+          this.saveData();
+        }
+        this.pauseTimer();
+        this.activeQuestion = null;
+        this.activeBuzzerTeam = null;
+
+        for (var i = 0; i < this.connections.length; i++) {
+          this.connections[i].conn.send({ type: 'status', status: 'IDLE' });
+        }
+      },
+
+      // --- ПУЛЬТ ИГРОКА (С ЗАЩИТОЙ ОТ ЗАВИСАНИЯ СЕТИ) ---
+      joinGame: function() {
+        SoundSys.init();
+        var pin = document.getElementById('player-room').value.trim();
+        var team = document.getElementById('player-team').value.trim();
+        var statusEl = document.getElementById('join-status');
+        var joinBtn = document.getElementById('btn-join');
+
+        if (pin.length !== 4 || team.length < 1) {
+          statusEl.innerText = 'Введите 4 цифры кода и название команды.';
+          return;
+        }
+
+        if (this.peer) {
+          try { this.peer.destroy(); } catch (e) {}
+          this.peer = null;
+        }
+
+        statusEl.innerText = 'Установка связи с комнатой...';
+        joinBtn.disabled = true;
+        var self = this;
+
+        clearTimeout(this.joinTimeout);
+        this.joinTimeout = setTimeout(function() {
+          if (self.role !== 'player') {
+            statusEl.innerText = 'Нет ответа от ведущего. Проверьте код и интернет.';
+            joinBtn.disabled = false;
+            if (self.peer) {
+              try { self.peer.destroy(); } catch (e) {}
+              self.peer = null;
+            }
+          }
+        }, 10000);
+
+        this.peer = new Peer(PEER_CONFIG);
+
+        this.peer.on('open', function() {
+          self.hostConn = self.peer.connect('si-krd-room-' + pin, {
+            reliable: true,
+            serialization: 'json'
+          });
+
+          self.hostConn.on('open', function() {
+            self.hostConn.send({ action: 'join', team: team });
+          });
+
+          self.hostConn.on('data', function(data) {
+            if (!data) return;
+            if (data.type === 'joined') {
+              clearTimeout(self.joinTimeout);
+              self.role = 'player';
+              joinBtn.disabled = false;
+              statusEl.innerText = '';
+              document.getElementById('player-team-badge').innerText = team;
+              self.showScreen('player-buzzer');
+              self.setBuzzerStatus(data.status || 'IDLE');
+            } else if (data.type === 'status') {
+              self.setBuzzerStatus(data.status);
+            }
+          });
+
+          self.hostConn.on('close', function() {
+            alert('Соединение с табло ведущего завершено.');
+            location.reload();
+          });
+        });
+
+        this.peer.on('error', function() {
+          clearTimeout(self.joinTimeout);
+          statusEl.innerText = 'Комната не найдена. Проверьте 4-значный код.';
+          joinBtn.disabled = false;
+        });
+      },
+
+      setBuzzerStatus: function(status) {
+        var btn = document.getElementById('buzzer-btn');
+        var text = document.getElementById('player-status-text');
+
+        if (status === 'IDLE') {
+          btn.disabled = true;
+          btn.classList.remove('active-buzz');
+          text.innerText = 'ОЖИДАНИЕ ВОПРОСА';
+          text.style.color = '#94a3b8';
+        } else if (status === 'READY') {
+          btn.disabled = false;
+          btn.classList.remove('active-buzz');
+          text.innerText = 'ЖМИТЕ НА КНОПКУ!';
+          text.style.color = '#fbbf24';
+        } else if (status === 'LOCKED') {
+          btn.disabled = true;
+          btn.classList.remove('active-buzz');
+          text.innerText = 'КНОПКА ЗАБЛОКИРОВАНА';
+          text.style.color = '#ef4444';
+        } else if (status === 'ACTIVE') {
+          btn.disabled = true;
+          btn.classList.add('active-buzz');
+          text.innerText = 'ВАША КОМАНДА ОТВЕЧАЕТ!';
+          text.style.color = '#22c55e';
+        }
+      },
+
+      buzz: function(e) {
+        if (e) e.preventDefault();
+        var btn = document.getElementById('buzzer-btn');
+        if (btn.disabled || !this.hostConn) return;
+
+        SoundSys.buzz();
+        this.hostConn.send({
+          action: 'buzz',
+          team: document.getElementById('player-team').value.trim()
+        });
+        this.setBuzzerStatus('ACTIVE');
+        if ('vibrate' in navigator) navigator.vibrate(80);
+      }
+    };
+
+    app.init();
+  </script>
+</body>
+</html>
